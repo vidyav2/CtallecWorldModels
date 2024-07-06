@@ -1,15 +1,16 @@
 """ Various auxiliary utilities """
 import math
 from os.path import join, exists
+import random
 import torch
 from torchvision import transforms
 import numpy as np
 from models import MDRNNCell, VAE, Controller
-import gym
+import gymnasium as gym
 import gym.envs.box2d
 
 # A bit dirty: manually change size of car racing env
-gym.envs.box2d.car_racing.STATE_W, gym.envs.box2d.car_racing.STATE_H = 64, 64
+gym.envs.box2d.car_racing.STATE_W, gym.envs.box2d.car_racing.STATE_H = 96, 96
 
 # Hardcoded for now
 ASIZE, LSIZE, RSIZE, RED_SIZE, SIZE =\
@@ -22,24 +23,48 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-def sample_continuous_policy(action_space, seq_len, dt):
-    """ Sample a continuous policy.
-
-    Atm, action_space is supposed to be a box environment. The policy is
-    sampled as a brownian motion a_{t+1} = a_t + sqrt(dt) N(0, 1).
-
-    :args action_space: gym action space
-    :args seq_len: number of actions returned
-    :args dt: temporal discretization
-
-    :returns: sequence of seq_len actions
+def sample_continuous_policy(action_space, seq_len, env):
+    """ Sample a continuous policy using a strategy that changes based on the time step.
+    
+    Early in the sequence, a specific action is used to encourage exploration (similar to a 'push' in car racing).
+    Afterwards, actions are sampled based on a random strategy with different probabilities for various maneuvers.
+    
+    :param action_space: Gym action space (assumed to be of type Box)
+    :param seq_len: Number of actions to be returned
+    :param env: The environment instance with an action space
+    
+    :returns: List of actions with length `seq_len`
     """
-    actions = [action_space.sample()]
-    for _ in range(seq_len):
-        daction_dt = np.random.randn(*actions[-1].shape)
-        actions.append(
-            np.clip(actions[-1] + math.sqrt(dt) * daction_dt,
-                    action_space.low, action_space.high))
+    actions = []
+    m=0
+    for m in range(seq_len):
+        if m < 5:
+            # Initial 'push' action for early exploration
+            action = np.array([-0.1, 1, 0])
+        else:
+            # Random action selection based on a modified strategy
+            rn = random.randint(0, 9)
+            if rn == 0:
+                action = np.array([0, random.random(), 0])  # Accelerate
+                #action = np.zeros(3)  # Do nothing
+            elif rn <= 4:
+                action = np.array([0, random.random(), 0])  # Accelerate
+            elif rn <= 6:
+                action = np.array([-random.random(), 0, 0])  # Turn left
+            elif rn <= 8:
+                action = np.array([random.random(), 0, 0])  # Turn right
+            elif rn == 9:
+                action = np.array([0, 0, random.random()])  # Brake
+            else:
+                action = env.action_space.sample()  # Default to a truly random action
+            #print(f"ABC Action: {action}")
+
+        # Ensure the action is within the valid range of the action space
+        action = np.clip(action, action_space.low, action_space.high)
+        actions.append(action)
+        #print(f"Action: {actions}")
+        
+        m=+1
     return actions
 
 def save_checkpoint(state, is_best, filename, best_filename):
@@ -137,7 +162,7 @@ class RolloutGenerator(object):
                 ctrl_state['reward']))
             self.controller.load_state_dict(ctrl_state['state_dict'])
 
-        self.env = gym.make('CarRacing-v0')
+        self.env = gym.make('CarRacing-v2')
         self.device = device
 
         self.time_limit = time_limit
