@@ -1,6 +1,8 @@
+"""
+Generating data from the CarRacing gym environment.
+!!! DOES NOT WORK ON TITANIC, DO IT AT HOME, THEN SCP !!!
+"""
 import argparse
-import json
-import numpy as np
 from os.path import join, exists
 import gym
 import numpy as np
@@ -10,7 +12,7 @@ def generate_data(rollouts, data_dir, noise_type): # pylint: disable=R0914
     """ Generates data """
     assert exists(data_dir), "The data directory does not exist..."
 
-    env = gym.make("CarRacing-v0")
+    env = gym.make("CarRacing-v2")
     seq_len = 1000
 
     for i in range(rollouts):
@@ -23,10 +25,8 @@ def generate_data(rollouts, data_dir, noise_type): # pylint: disable=R0914
 
         s_rollout = []
         r_rollout = []
-        a_rollout = []
         d_rollout = []
 
-        hidden = [torch.zeros(1, 256).to(device) for _ in range(2)]
         t = 0
         while True:
             action = a_rollout[t]
